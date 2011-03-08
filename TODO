@@ -1,0 +1,8 @@
+* Implement Shrink client, an Akka microkernel application that will:
+	* Connect to Redis in order to publish
+	* Accept connections via remote actors to read in messages
+
+* Implemenet Shrink consumer, an Akka microkernel application that will:
+	* Connect to Redis in order to subscribe
+	* Allows consumers (actors) to subscribe to Redis channels to process data
+
