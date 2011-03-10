@@ -14,7 +14,7 @@ case class Host(address:String)
 /**
  * Final format of the messages going across the network
  */
-case class TransportMessage[T](from:Host, data:Array[Byte], clazz:Class[T])
+case class TransportMessage(from:Host, data:Array[Byte], clazz:String)
 
 /**
  * Trait defining what it means to be serializable.
@@ -68,6 +68,8 @@ case class StringMessage(from:Host, data:String) extends Message {
   type obj = String
 }
 
+object StringMessage extends ByteArraySerialization
+
 /**
  * Abstraction of Shrink relay layer for relaying messages
  */
@@ -82,13 +84,13 @@ trait ShrinkAgent extends Actor {
   val relay: ActorRef
   
   override def preStart {
-    log.info("Shrink agent is starting up...")   
+    log.info("Shrink agent is starting up...")
   }
 
   def receive = {
     case msg:Message => {
       log.info("Got message: " + msg.from.address + " => " + msg.data)
-      relay ! TransportMessage(msg.from, msg.serialize(msg.data), msg.getClass)
+      relay ! TransportMessage(msg.from, msg.serialize(msg.data), msg.getClass.getName)
     }
 
     case _ =>
@@ -102,7 +104,7 @@ trait ShrinkAgent extends Actor {
 class ShrinkClient(host:String, port:Int) {
   val service = remote.actorFor("shrink-service", host, port)
 
-  def send[T <: Serializable](msg:Message) {
+  def send(msg:Message) {
     service ! msg
   }
 }
@@ -113,9 +115,9 @@ class ShrinkClient(host:String, port:Int) {
  */
 class RedisShrinkRelay extends ShrinkRelay {
   def receive = {
-    case msg:TransportMessage[Serializable] => {
+    case msg:TransportMessage => {
       val d = msg     
-      val m = msg.clazz.newInstance.asInstanceOf[{ def deserialize(d:Array[Byte]) : Any }]
+      val m = Class.forName(msg.clazz).asInstanceOf[{ def deserialize(d:Array[Byte]) : Any }]
       val data = m.deserialize(msg.data)
 
       println("DESERIALIZE: " + msg.data + " -> " + data)

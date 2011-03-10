@@ -36,9 +36,9 @@ class SimpleServiceActor extends Actor {
   private val KEY = "COUNTER"
   private var hasStartedTicking = false
   private val storage = TransactionalMap[String, Integer]()
-  var agent = new ShrinkRedisTextAgent()
 
-  var service = remote.start("localhost", 2552)  
+  var agent = new ShrinkRedisTextAgent()
+  var service = remote.start("localhost", 2552, getClass.getClassLoader)  
   remote.register("shrink-service", actorOf(agent))
 
   var client = new ShrinkClient("localhost", 2552)
@@ -51,6 +51,7 @@ class SimpleServiceActor extends Actor {
         storage.put(KEY, new Integer(updated))
         updated
       }
+
       client.send(new StringMessage(new Host("osaka"), "ticks=" + count))
       self.reply(<success>Tick:{count}</success>)
     } else {
