@@ -51,7 +51,7 @@ class SimpleServiceActor extends Actor {
         storage.put(KEY, new Integer(updated))
         updated
       }
-
+      
       client.send(new StringMessage(new Host("osaka"), "ticks=" + count))
       self.reply(<success>Tick:{count}</success>)
     } else {

@@ -8,9 +8,11 @@ import akka.config.Supervision._
 
 case class Flood(times:Int)
 
+/**
+ * Floods the agent with messages
+ */
 class FloodClient extends Actor {
-  self.dispatcher = FloodClient.dispatcher
-  var agent = new ShrinkRedisTextAgent()
+  self.dispatcher = FloodClient.dispatcher  
   var client = new ShrinkClient("localhost", 2552)
 
   def receive = {
@@ -23,6 +25,9 @@ class FloodClient extends Actor {
   }
 }
 
+/**
+ * Companion object that also creates a dispatcher and supervisor.
+ */
 object FloodClient {
 
   // Count of actors that will balance the load
@@ -63,13 +68,15 @@ object FloodClient {
 
 }
 
-
+/**
+ * Quick example.
+ */
 object FloodExample {
   def main(args: Array[String]): Unit = {
 
-    for (i <- 1 to 2) {
+    for (i <- 1 to 500) {
       println("Flooding " + "(" + i + ")")
-      FloodClient() ! Flood(1)
+      FloodClient() ! Flood(1000)
     }
   }
 }
