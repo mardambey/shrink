@@ -18,7 +18,7 @@ class FloodClient extends Actor {
   def receive = {
     case Flood(times) => {
       for (i <- 1 to times) {
-	client.send(new StringMessage(new Host("osaka"), "ticks=" + i))
+	client.send(new Message(new Host("osaka"), "ticks=" + i))
       }
     }
     case _ =>
@@ -42,7 +42,7 @@ object FloodClient {
   var dispatcher = workStealingDispatcher
   .withNewThreadPoolWithLinkedBlockingQueueWithUnboundedCapacity
   .setCorePoolSize(ACTORS_COUNT)
-  .buildThreadPool
+  .build
 
   /*
    * Creates list of actors the will be supervized

@@ -42,6 +42,8 @@ class SimpleServiceActor extends Actor {
   remote.register("shrink-service", actorOf(agent))
 
   var client = new ShrinkClient("localhost", 2552)
+  
+  Sub.sub("shrink-channel")
 
   def receive = {
     case "Tick" => if (hasStartedTicking) {
@@ -52,7 +54,7 @@ class SimpleServiceActor extends Actor {
         updated
       }
       
-      client.send(new StringMessage(new Host("osaka"), "ticks=" + count))
+      client.send(new Message(new Host("osaka"), "ticks=" + count))
       self.reply(<success>Tick:{count}</success>)
     } else {
       atomic {

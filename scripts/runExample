@@ -1,0 +1,5 @@
+#!/bin/sh
+SCALA_VERSION=2.8.1
+SCRIPT=$(readlink -f $0)
+export AKKA_HOME=`dirname $SCRIPT`
+java -Xms256m -Xmx1g -cp $AKKA_HOME/shrink_2.8.1-0.0.1.jar shrink.FloodExample

@@ -3,9 +3,10 @@ package shrink
 import akka.actor.Actor
 import akka.actor.ActorRef
 import akka.actor.Actor._
-import Actor._
 import java.io.{ByteArrayInputStream,ByteArrayOutputStream,ObjectOutputStream,ObjectInputStream}
 import java.lang.reflect.Method
+import com.redis.RedisClient
+import akka.persistence.redis._
 
 /**
  * A host in the system, usually a client.
@@ -13,69 +14,14 @@ import java.lang.reflect.Method
 case class Host(address:String)
 
 /**
- * Trait defining what it means to be serializable.
- */
-trait Serialization {  
-  type obj // type of object to serialize
-  def serialize(o:obj):Array[Byte]
-  def deserialize(d:Array[Byte]):obj
-}
-
-/**
- * Serializes to a byte array.
- */
-trait SimpleSerialization extends Serialization {  
-
-  override def serialize(o:obj) : Array[Byte] = {
-    val bos = new ByteArrayOutputStream()
-    val oos = new ObjectOutputStream(bos)
-    oos.writeObject(o)
-    oos.flush
-    oos.close
-    bos.close
-    bos.toByteArray
-  }
-
-  override def deserialize(d:Array[Byte]) : obj = {
-    val bis = new ByteArrayInputStream(d)
-    val ois = new ObjectInputStream(bis)
-    val r = ois.readObject.asInstanceOf[obj]
-    ois.close
-    bis.close    
-    r
-  }
-}
-
-/**
  * A message sent from a client to be broadcasted.
  */
-trait Message { 
-  type dataType // type of the data the message will carry
-  val from:Host
-  var data:Option[dataType] = None
-  var sdata:Option[Array[Byte]] = None
-}
-
-/**
- * String message, a message with a string data type.
- */
-case class StringMessage(from:Host, d:String) extends Message with SimpleSerialization {
-  type dataType = String
-  data = Option(d)
-}
+case class Message(from:Host, text:String)
 
 /**
  * Abstraction of Shrink relay layer for relaying messages
  */
 trait ShrinkRelay extends Actor
-
-/**
- * A serializable message.
- */
-trait SerializableMessage extends Message with Serialization { 
-  type obj = Any
-  type dataType = Any 
-}
 
 /**
  * The agent sits on a client machine and accepts messages from
@@ -91,7 +37,7 @@ trait ShrinkAgent extends Actor {
 
   def receive = {
     case msg:Message => {
-      log.info("[ShrinkAgent] Got message (relaying): " + msg.from.address + " => " + msg.data + " : " + msg)
+      log.info("[ShrinkAgent] Got message (relaying): " + msg.from.address + " => " + msg.text + " : " + msg)
       relay ! msg
     }
 
@@ -107,13 +53,8 @@ class ShrinkClient(host:String, port:Int) {
   val service = remote.actorFor("shrink-service", host, port)
 
   def send(msg:Message) {
-    msg match {
-      case m:Serialization => {     
-	msg.sdata = Option(m.serialize(msg.data.asInstanceOf[m.obj]))
-	msg.data = None
-	service ! msg
-      }
-    }
+    log.debug("[ShrinkClient] Sending message to shrink-service: " + msg)
+    service ! msg
   }
 }
 
@@ -122,17 +63,24 @@ class ShrinkClient(host:String, port:Int) {
  * pass messages around.
  */
 class RedisShrinkRelay extends ShrinkRelay {
+  // redis
+  var r = new RedisClient()
+  // publisher
+  val p = actorOf(new Publisher(r))
+  // channel to publish to
+  val channel = "shrink-channel"
+  // start publisher
+  p.start
+
   def receive = {
     case msg:Message => {
-      msg match {
-	case m:Serialization => {
-	  val d = m.deserialize(msg.sdata.get)
-	  log.info("[RedisShrinkRelay] relaying message from: " + msg.from.address + " \"" + d + "\"")
-	}
-      }
-    } 
+      log.info("[RedisShrinkRelay] Relaying message from: " + msg.from.address + " \"" + msg.text + "\"")
+      p ! Publish(channel, msg.text)
+    }
+
+    case _ =>
   }
-}
+} 
 
 /**
  * Factory that creates and starts the Redis
