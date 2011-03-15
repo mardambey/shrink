@@ -24,37 +24,37 @@ case class Message(from:Host, text:String)
 trait ShrinkRelay extends Actor
 
 /**
+ * This is a simple Shrink client that gets a shrink
+ * service actor (an agent) and sends messages to it.
+ */
+class ShrinkClient(host:String, port:Int, var channel:String = "") {
+  val service = remote.actorFor("shrink-service", host, port)
+
+  def send(msg:Message, ch:String = channel) {
+    log.debug("[ShrinkClient] Sending message to shrink-service: " + msg)
+    service ! List(ch, msg)
+  }
+}
+
+/**
  * The agent sits on a client machine and accepts messages from
  * local clients so they can be sent to the relay server.
  */
 trait ShrinkAgent extends Actor {
 
   val relay: ActorRef
-  
+
   override def preStart {
     log.info("[ShrinkAgent] Shrink agent is starting up...")
   }
 
   def receive = {
-    case msg:Message => {
+    case m @ List(channel:String, msg:Message) => {
       log.info("[ShrinkAgent] Got message (relaying): " + msg.from.address + " => " + msg.text + " : " + msg)
-      relay ! msg
+      relay ! m
     }
 
-    case _ =>
-  }
-}
-
-/**
- * This is a simple Shrink client that gets a shrink
- * service actor and sends messages to it.
- */
-class ShrinkClient(host:String, port:Int) {
-  val service = remote.actorFor("shrink-service", host, port)
-
-  def send(msg:Message) {
-    log.debug("[ShrinkClient] Sending message to shrink-service: " + msg)
-    service ! msg
+    case ignore => log.error("[ShrinkAgent] Error relaying messge: " + ignore)
   }
 }
 
@@ -67,18 +67,16 @@ class RedisShrinkRelay extends ShrinkRelay {
   var r = new RedisClient()
   // publisher
   val p = actorOf(new Publisher(r))
-  // channel to publish to
-  val channel = "shrink-channel"
   // start publisher
   p.start
 
   def receive = {
-    case msg:Message => {
+    case List(channel:String, msg:Message) => {
       log.info("[RedisShrinkRelay] Relaying message from: " + msg.from.address + " \"" + msg.text + "\"")
-      p ! Publish(channel, msg.text)
+      p ! Publish("shrink/" + channel, msg.text)
     }
 
-    case _ =>
+    case ignore => log.error("[RedisShrinkRelay] Error sending unknown message: " + ignore + " from " + self)
   }
 } 
 

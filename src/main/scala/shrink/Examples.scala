@@ -13,7 +13,7 @@ case class Flood(times:Int)
  */
 class FloodClient extends Actor {
   self.dispatcher = FloodClient.dispatcher  
-  var client = new ShrinkClient("localhost", 2552)
+  var client = new ShrinkClient("localhost", 2552, "example-channel")
 
   def receive = {
     case Flood(times) => {

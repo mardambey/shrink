@@ -41,7 +41,7 @@ class SimpleServiceActor extends Actor {
   var service = remote.start("localhost", 2552, getClass.getClassLoader)  
   remote.register("shrink-service", actorOf(agent))
 
-  var client = new ShrinkClient("localhost", 2552)
+  var client = new ShrinkClient("localhost", 2552, "service-test")
   
   Sub.sub("shrink-channel")
 
