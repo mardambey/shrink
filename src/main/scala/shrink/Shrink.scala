@@ -88,6 +88,19 @@ class RedisShrinkRelay extends ShrinkRelay {
 trait RedisShrinkRelayFactory { this: Actor => val relay:ActorRef = actorOf[RedisShrinkRelay].start }
 
 /**
+ * The watcher will watch over its list of channels
+ * and will alert its processors when new data
+ * arrives on a channel.
+ */
+trait ShrinkWatcher extends Actor {
+   // Subscribe a given processor to a channel.
+  def sub(channel:String, proc:ActorRef)
+
+  // Unsubscribe a given processor from a channel
+  def unsub(channel:String, proc:ActorRef)
+}
+
+/**
  * A simple shrink implementation that uses Redis to relay.
  */
 class ShrinkRedisTextAgent extends 
