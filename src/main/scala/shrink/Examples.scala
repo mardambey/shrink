@@ -13,6 +13,8 @@ case class Flood(times:Int)
  */
 class FloodClient extends Actor {
   self.dispatcher = FloodClient.dispatcher  
+
+  // create a client and set the channel to send on
   var client = new ShrinkClient("localhost", 2552, "example-channel")
 
   def receive = {
@@ -21,7 +23,8 @@ class FloodClient extends Actor {
 	client.send(new Message(new Host("osaka"), "ticks=" + i))
       }
     }
-    case _ =>
+
+    case ignore => log.error("[FloodClient] Ignored: " + ignore)
   }
 }
 
@@ -62,10 +65,27 @@ object FloodClient {
   supervisor.start
 
   def apply() = Actor.registry.actorsFor[FloodClient](classOf[FloodClient]).head
+}
 
-  // supervisor.stop
-  // supervisor.shutdown
+class ExampleProcessor extends Actor {
+  // tune into a channel
+  FloodRedisWatcher() ! "example-channel"
 
+  def receive = {
+    case msg:String => {
+      log.info("[ExampleProcessor] Got a new message: " + msg)
+    }
+  }
+
+}
+
+/**
+ * Watches redis for messages and tells processors
+ */
+object FloodRedisWatcher {
+  val watcher = actorOf(new RedisShrinkWatcher()).start
+
+  def apply() = watcher
 }
 
 /**
@@ -74,9 +94,14 @@ object FloodClient {
 object FloodExample {
   def main(args: Array[String]): Unit = {
 
-    for (i <- 1 to 500) {
+    // create a processor to deal with messages
+    val proc = actorOf[ExampleProcessor].start
+
+    for (i <- 1 to 100) {
       println("Flooding " + "(" + i + ")")
-      FloodClient() ! Flood(1000)
+      val client = FloodClient()
+      client ! Flood(100)
     }
   }
 }
+

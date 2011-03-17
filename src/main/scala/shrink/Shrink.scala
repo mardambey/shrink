@@ -1,12 +1,12 @@
 package shrink
 
+import com.redis.{RedisClient, PubSubMessage, S, U, M}
+import akka.persistence.redis._
 import akka.actor.Actor
 import akka.actor.ActorRef
 import akka.actor.Actor._
 import java.io.{ByteArrayInputStream,ByteArrayOutputStream,ObjectOutputStream,ObjectInputStream}
 import java.lang.reflect.Method
-import com.redis.RedisClient
-import akka.persistence.redis._
 
 /**
  * A host in the system, usually a client.
@@ -27,7 +27,7 @@ trait ShrinkRelay extends Actor
  * This is a simple Shrink client that gets a shrink
  * service actor (an agent) and sends messages to it.
  */
-class ShrinkClient(host:String, port:Int, var channel:String = "") {
+class ShrinkClient(host:String, port:Int, var channel:String = "shrink") {
   val service = remote.actorFor("shrink-service", host, port)
 
   def send(msg:Message, ch:String = channel) {
@@ -62,7 +62,7 @@ trait ShrinkAgent extends Actor {
  * This implements a shrink relay that uses Redis to
  * pass messages around.
  */
-class RedisShrinkRelay extends ShrinkRelay {
+class RedisShrinkRelay(val host:String = "localhost", val port:Int = 6389)  extends ShrinkRelay {
   // redis
   var r = new RedisClient()
   // publisher
@@ -72,8 +72,8 @@ class RedisShrinkRelay extends ShrinkRelay {
 
   def receive = {
     case List(channel:String, msg:Message) => {
-      log.info("[RedisShrinkRelay] Relaying message from: " + msg.from.address + " \"" + msg.text + "\"")
-      p ! Publish("shrink/" + channel, msg.text)
+      log.info("[RedisShrinkRelay] Relaying message from: " + msg.from.address + " \"" + msg.text + "\"")      
+      p ! Publish(channel, msg.text)
     }
 
     case ignore => log.error("[RedisShrinkRelay] Error sending unknown message: " + ignore + " from " + self)
@@ -85,7 +85,7 @@ class RedisShrinkRelay extends ShrinkRelay {
  * shrink relay, mixed into shrink agents that
  * wish to use Redis.
  */
-trait RedisShrinkRelayFactory { this: Actor => val relay:ActorRef = actorOf[RedisShrinkRelay].start }
+trait RedisShrinkRelayFactory { this: Actor => val relay:ActorRef = actorOf(new RedisShrinkRelay()).start }
 
 /**
  * The watcher will watch over its list of channels
@@ -93,11 +93,88 @@ trait RedisShrinkRelayFactory { this: Actor => val relay:ActorRef = actorOf[Redi
  * arrives on a channel.
  */
 trait ShrinkWatcher extends Actor {
-   // Subscribe a given processor to a channel.
-  def sub(channel:String, proc:ActorRef)
+   // Subscribe a given processor to channels
+  def sub(proc:ActorRef, channels:String*)
 
-  // Unsubscribe a given processor from a channel
-  def unsub(channel:String, proc:ActorRef)
+  // Unsubscribe a given processor from channels
+  def unsub(proc:ActorRef, channels:String*)
+}
+
+class RedisShrinkWatcher(val host:String = "localhost", val port:Int = 6379) extends ShrinkWatcher {
+  
+  val r = new RedisClient(host, port)
+  val s = actorOf(new Subscriber(r)).start
+  s ! Register(callback)
+
+  // subscribers, channel mapped to set of actors
+  var subs = Map[String, collection.mutable.Set[ActorRef]]()
+
+  override def sub(proc:ActorRef, channels:String*) {
+    // i don't like the use of getOrElse here
+    channels.foreach (
+      channel => subs += channel -> (subs.getOrElse(channel, collection.mutable.Set[ActorRef]()) += proc)
+    )
+
+    log.debug("[RedisShrinkWatcher] Subscribing " + proc + " to " + channels)
+
+    // subscribe with redis
+    s ! Subscribe(channels.toArray)
+  }
+
+  override def unsub(proc:ActorRef, channels:String*) {}
+
+  def receive = {    
+    // subscribe sender
+    case channel: String => {
+      log.debug("[RedisShrinkWatcher] Subscribing a sender to " + channel)
+      self.sender.foreach(sub(_, List(channel): _*)) // cast it with : _*
+    }
+
+    case ignore => log.error("[RedisShrinkWatcher] Ignoring message: " + ignore)
+  }
+
+  def sub(channels: String*) = {
+    s ! Subscribe(channels.toArray)
+  }
+
+  def unsub(channels: String*) = {
+    s ! Unsubscribe(channels.toArray)
+  }
+
+  def callback(pubsub: PubSubMessage) = pubsub match {
+    case S(channel, no) => println("subscribed to " + channel + " and count = " + no)
+    case U(channel, no) => println("unsubscribed from " + channel + " and count = " + no)
+    case M(channel, msg) =>
+      msg match {
+        // exit will unsubscribe from all channels and stop subscription service
+        case "exit" =>
+          println("unsubscribe all ..")
+          r.unsubscribe
+
+        // message "+x" will subscribe to channel x
+        case x if x startsWith "+" =>
+          val s: Seq[Char] = x
+          s match {
+            case Seq('+', rest @ _*) => r.subscribe(rest.toString){ m => }
+          }
+
+        // message "-x" will unsubscribe from channel x
+        case x if x startsWith "-" =>
+          val s: Seq[Char] = x
+          s match {
+            case Seq('-', rest @ _*) => r.unsubscribe(rest.toString)
+          }
+
+        // check who's subscribed on the channel and forward over the
+	// message so they can process it
+        case x => {
+          log.debug("[RedisShrinkWatcher] received message on channel " + channel + " as : " + x)
+	  // this is annoying, I know, creating and throwing out that map
+	  // how should this be done?
+	  subs.getOrElse(channel, collection.mutable.Set[ActorRef]()).foreach(_ ! msg)
+	}
+      }
+  }
 }
 
 /**
