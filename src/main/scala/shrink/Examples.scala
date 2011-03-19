@@ -6,6 +6,9 @@ import akka.dispatch.{Dispatchers, MessageDispatcher}
 import akka.actor.SupervisorFactory
 import akka.config.Supervision._
 
+import shrink.processors.ShrinkProcessor
+import shrink.processors.pipelined._
+
 case class Flood(times:Int)
 
 /**
@@ -89,6 +92,20 @@ object FloodRedisWatcher {
 }
 
 /**
+ * Create a pipelined processor that will:
+ * - write to standard out
+ */
+class ExamplePipelinedProcessor extends 
+ShrinkProcessor with       // define a shrink processor (actor)
+PipelinedProcessing with  // that will behave in a pipelined fashion 
+StdoutWriter with            // and will write all messges to stdout
+FifoWriter                       // and will write all messages to a fifo
+{
+  // tune into a channel
+  FloodRedisWatcher() ! "example-channel"
+}
+
+/**
  * Quick example.
  */
 object FloodExample {
@@ -97,10 +114,13 @@ object FloodExample {
     // create a processor to deal with messages
     val proc = actorOf[ExampleProcessor].start
 
-    for (i <- 1 to 100) {
+    // create a pipelined processor to deal with messages
+    val pipedProc = actorOf[ExamplePipelinedProcessor].start
+
+    for (i <- 1 to 2) {
       println("Flooding " + "(" + i + ")")
       val client = FloodClient()
-      client ! Flood(100)
+      client ! Flood(1)
     }
   }
 }

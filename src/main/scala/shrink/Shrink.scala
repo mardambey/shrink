@@ -1,5 +1,7 @@
 package shrink
 
+import scala.collection.mutable.{ListBuffer => List}
+
 import com.redis.{RedisClient, PubSubMessage, S, U, M}
 import akka.persistence.redis._
 import akka.actor.Actor
@@ -156,45 +158,67 @@ class RedisShrinkWatcher(val host:String = "localhost", val port:Int = 6379) ext
   }
 }
 
-/**
- * Processors in shrink can be any actor and do not need to extend
- * anything special. This processor is provided for convenience and as
- * an example that people can use.
- */
-trait ShrinkProcessor extends Actor
+  /**
+   * Processors in shrink can be any actor and do not need to extend
+   * anything special. This processor is provided for convenience and as
+   * an example that people can use.
+   */
+package processors {
 
-/**
- * Allows a shrink processor to implement sub-processors
- * as a pipeline.
- */
-trait PipelinedProcessing extends Actor {
+  trait ShrinkProcessor extends Actor
 
-  var pipeline = List[String => String]()
+  package pipelined {
+    /**
+     * Allows a shrink processor to implement sub-processors
+     * as a pipeline.
+     */
+    trait PipelinedProcessing extends Actor {
 
-  // accept a function and register it
-  def register(proc:String => String) = {
-    pipeline ::: List(proc)
-  }
+      var pipeline = List[String => String]()
 
-  def receive = {
-    case msg:String => {	
+      // accept a function and register it
+      def register(proc:String => String) = {
+	pipeline += proc
+      }
+
+      def receive = {
+	case msg:String => {
+	  log.debug("[PipelinedProcessing] Received messgage: " + msg)
+
+	  var m = msg
+	  pipeline foreach { p => m = p(m) }
+	  m
+	}
+
+	case ignore => log.warning("[PipelinedProcessing] Ignored message: " + ignore)
+      }
     }
-    case ignore => log.warning("[PipelinedProcessing] Ignored message: " + ignore)
-  }
-}
 
-trait ShrinkProcFifoWriter {
-  this:PipelinedProcessing => {
-    register(fifoWriter)
-  }
+    trait FifoWriter {
+      this:PipelinedProcessing => {
+	register(fifoWriter)
+      }
 
-  def fifoWriter(msg:String):String = {
-    // TODO: write msg to fifo
-    
-    msg
-  }
+      def fifoWriter(msg:String):String = {
+	// TODO: write msg to fifo
+	
+	msg
+      }
 
-  var fifo:String = ""
+      var fifo:String = ""
+    }
+
+    trait StdoutWriter {
+      this:PipelinedProcessing => {
+	register(stdoutWriter)
+      }
+
+      def stdoutWriter(msg:String):String = {
+	println("[StdoutWriter] " + msg)
+	msg
+      }
+    }
+  } 
 }
 
 /**
