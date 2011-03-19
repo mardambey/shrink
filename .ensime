@@ -3,7 +3,8 @@
 (
 
 :project-package "shrink"
-
+:sbt-compile-on-save t
+:compile-jars ("lib_managed/scala_2.8.1/compile")
 :use-sbt t
 
 )

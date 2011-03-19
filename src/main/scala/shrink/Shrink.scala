@@ -144,36 +144,15 @@ class RedisShrinkWatcher(val host:String = "localhost", val port:Int = 6379) ext
   def callback(pubsub: PubSubMessage) = pubsub match {
     case S(channel, no) => println("subscribed to " + channel + " and count = " + no)
     case U(channel, no) => println("unsubscribed from " + channel + " and count = " + no)
-    case M(channel, msg) =>
-      msg match {
-        // exit will unsubscribe from all channels and stop subscription service
-        case "exit" =>
-          println("unsubscribe all ..")
-          r.unsubscribe
-
-        // message "+x" will subscribe to channel x
-        case x if x startsWith "+" =>
-          val s: Seq[Char] = x
-          s match {
-            case Seq('+', rest @ _*) => r.subscribe(rest.toString){ m => }
-          }
-
-        // message "-x" will unsubscribe from channel x
-        case x if x startsWith "-" =>
-          val s: Seq[Char] = x
-          s match {
-            case Seq('-', rest @ _*) => r.unsubscribe(rest.toString)
-          }
-
-        // check who's subscribed on the channel and forward over the
-	// message so they can process it
-        case x => {
-          log.debug("[RedisShrinkWatcher] received message on channel " + channel + " as : " + x)
-	  // this is annoying, I know, creating and throwing out that map
-	  // how should this be done?
-	  subs.getOrElse(channel, collection.mutable.Set[ActorRef]()).foreach(_ ! msg)
-	}
-      }
+    case M(channel, msg) => {      
+      // check who's subscribed on the channel and forward over the
+      // message so they can process it
+      
+      log.debug("[RedisShrinkWatcher] received message on channel " + channel + " as : " + msg)
+      // this is annoying, I know, creating and throwing out that map
+      // how should this be done?
+      subs.getOrElse(channel, collection.mutable.Set[ActorRef]()).foreach(_ ! msg)
+    }
   }
 }
 
