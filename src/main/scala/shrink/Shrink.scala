@@ -157,6 +157,47 @@ class RedisShrinkWatcher(val host:String = "localhost", val port:Int = 6379) ext
 }
 
 /**
+ * Processors in shrink can be any actor and do not need to extend
+ * anything special. This processor is provided for convenience and as
+ * an example that people can use.
+ */
+trait ShrinkProcessor extends Actor
+
+/**
+ * Allows a shrink processor to implement sub-processors
+ * as a pipeline.
+ */
+trait PipelinedProcessing extends Actor {
+
+  var pipeline = List[String => String]()
+
+  // accept a function and register it
+  def register(proc:String => String) = {
+    pipeline ::: List(proc)
+  }
+
+  def receive = {
+    case msg:String => {	
+    }
+    case ignore => log.warning("[PipelinedProcessing] Ignored message: " + ignore)
+  }
+}
+
+trait ShrinkProcFifoWriter {
+  this:PipelinedProcessing => {
+    register(fifoWriter)
+  }
+
+  def fifoWriter(msg:String):String = {
+    // TODO: write msg to fifo
+    
+    msg
+  }
+
+  var fifo:String = ""
+}
+
+/**
  * A simple shrink implementation that uses Redis to relay.
  */
 class ShrinkRedisTextAgent extends 
