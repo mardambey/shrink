@@ -112,7 +112,7 @@ FileWriter                       // and will write all messages to a file
 }
 
 /**
- * Quick example.
+ * Quick client example.
  */
 object FloodExample {
   def main(args: Array[String]): Unit = {
@@ -131,3 +131,11 @@ object FloodExample {
   }
 }
 
+/**
+ * An example Akka microkernel boot class for a Shrink service.
+ * Uses the ShrinkRedisTextAgent
+ */
+class ExampleBoot {
+  var service = remote.start("localhost", 2552, getClass.getClassLoader)  
+  remote.register("shrink-service", actorOf(new ShrinkRedisAgent()))
+}

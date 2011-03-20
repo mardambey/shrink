@@ -246,7 +246,7 @@ package processors {
 /**
  * A simple shrink implementation that uses Redis to relay.
  */
-class ShrinkRedisTextAgent extends 
+class ShrinkRedisAgent extends 
   ShrinkAgent with 
   RedisShrinkRelayFactory {
 }
