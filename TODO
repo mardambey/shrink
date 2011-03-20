@@ -1,2 +1,1 @@
-* Create a message processor that will simply write out messages to a fifo.
 * Create a message processor that will post the message to an http service.

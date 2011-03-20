@@ -9,6 +9,7 @@ import akka.actor.ActorRef
 import akka.actor.Actor._
 import java.io.{ByteArrayInputStream,ByteArrayOutputStream,ObjectOutputStream,ObjectInputStream}
 import java.lang.reflect.Method
+import java.io.{OutputStreamWriter,BufferedWriter}
 
 /**
  * A host in the system, usually a client.
@@ -168,6 +169,11 @@ package processors {
   trait ShrinkProcessor extends Actor
 
   package pipelined {
+
+    trait PipelineProcessor {
+      def apply(msg:String, args:Array[Any]) : String
+    }
+
     /**
      * Allows a shrink processor to implement sub-processors
      * as a pipeline.
@@ -178,6 +184,7 @@ package processors {
 
       // accept a function and register it
       def register(proc:String => String) = {
+	log.debug("[PipelinedProcessing] Registering: " + proc)
 	pipeline += proc
       }
 
@@ -186,7 +193,7 @@ package processors {
 	  log.debug("[PipelinedProcessing] Received messgage: " + msg)
 
 	  var m = msg
-	  pipeline foreach { p => m = p(m) }
+	  pipeline foreach ( proc => m = proc(m) )	 
 	  m
 	}
 
@@ -194,31 +201,46 @@ package processors {
       }
     }
 
-    trait FifoWriter {
-      this:PipelinedProcessing => {
-	register(fifoWriter)
+    /**
+     * Writes the message to a file.
+     */
+    trait FileWriter {
+      this:PipelinedProcessing => {	
+	register(fileWriter)
       }
 
-      def fifoWriter(msg:String):String = {
-	// TODO: write msg to fifo
-	
+      // the output stream to use
+      var writers = List[OutputStreamWriter]()
+
+      /**
+       * Add new processes that will receive the message
+       */
+      def writeToFiles(args:OutputStreamWriter*) = writers ++= args
+
+      def fileWriter(msg:String):String = {
+	log.debug("[FileWriter] Writing message: " + msg)
+	writers.foreach(w => {
+	  w.write(msg)
+	  w.flush
+	})
 	msg
       }
-
-      var fifo:String = ""
     }
-
+       
+    /**
+     * Writes the message to stdout
+     */
     trait StdoutWriter {
       this:PipelinedProcessing => {
 	register(stdoutWriter)
-      }
+      }    
 
-      def stdoutWriter(msg:String):String = {
+      def stdoutWriter(msg:String) : String = {
 	println("[StdoutWriter] " + msg)
 	msg
       }
-    }
-  } 
+    }  
+  }
 }
 
 /**

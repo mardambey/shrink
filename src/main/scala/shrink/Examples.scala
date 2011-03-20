@@ -9,6 +9,9 @@ import akka.config.Supervision._
 import shrink.processors.ShrinkProcessor
 import shrink.processors.pipelined._
 
+import scala.collection.mutable.{ListBuffer}
+import java.io.{OutputStreamWriter,BufferedWriter, File, FileOutputStream}
+
 case class Flood(times:Int)
 
 /**
@@ -99,8 +102,11 @@ class ExamplePipelinedProcessor extends
 ShrinkProcessor with       // define a shrink processor (actor)
 PipelinedProcessing with  // that will behave in a pipelined fashion 
 StdoutWriter with            // and will write all messges to stdout
-FifoWriter                       // and will write all messages to a fifo
+FileWriter                       // and will write all messages to a file
 {
+  // FileWriter api 
+  writeToFiles(new OutputStreamWriter(new FileOutputStream("/tmp/shrink.out")))
+    
   // tune into a channel
   FloodRedisWatcher() ! "example-channel"
 }
@@ -118,7 +124,7 @@ object FloodExample {
     val pipedProc = actorOf[ExamplePipelinedProcessor].start
 
     for (i <- 1 to 2) {
-      println("Flooding " + "(" + i + ")")
+      log.info("Flooding " + "(" + i + ")")
       val client = FloodClient()
       client ! Flood(1)
     }
